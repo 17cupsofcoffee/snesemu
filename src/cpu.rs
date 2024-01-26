@@ -77,6 +77,14 @@ impl Cpu {
         self.pc = (addr & 0x0000FFFF) as u16;
     }
 
+    pub fn a_u8_mode(&self) -> bool {
+        self.emulation || self.status.contains(Flags::MEMORY_SELECT)
+    }
+
+    pub fn xy_u8_mode(&self) -> bool {
+        self.emulation || self.status.contains(Flags::INDEX_REGISTER)
+    }
+
     pub fn last_instruction(&self) -> Instruction {
         self.last_instruction
     }
@@ -152,7 +160,7 @@ impl Cpu {
             0x68 => Instruction::PullA,
 
             0x69 => {
-                if self.emulation || self.status.contains(Flags::MEMORY_SELECT) {
+                if self.xy_u8_mode() {
                     Instruction::AddWithCarryImmediate(Immediate::U8(self.fetch_u8(mmu)))
                 } else {
                     Instruction::AddWithCarryImmediate(Immediate::U16(self.fetch_u16(mmu)))
@@ -182,7 +190,7 @@ impl Cpu {
             0x9F => Instruction::StoreAAbsoluteLongIndexedX(self.fetch_long(mmu)),
 
             0xA0 => {
-                if self.emulation || self.status.contains(Flags::INDEX_REGISTER) {
+                if self.xy_u8_mode() {
                     Instruction::LoadYImmediate(Immediate::U8(self.fetch_u8(mmu)))
                 } else {
                     Instruction::LoadYImmediate(Immediate::U16(self.fetch_u16(mmu)))
@@ -190,7 +198,7 @@ impl Cpu {
             }
 
             0xA2 => {
-                if self.emulation || self.status.contains(Flags::INDEX_REGISTER) {
+                if self.xy_u8_mode() {
                     Instruction::LoadXImmediate(Immediate::U8(self.fetch_u8(mmu)))
                 } else {
                     Instruction::LoadXImmediate(Immediate::U16(self.fetch_u16(mmu)))
@@ -204,7 +212,7 @@ impl Cpu {
             0xA7 => Instruction::LoadADirectPageIndirectLong(self.fetch_u8(mmu)),
 
             0xA9 => {
-                if self.emulation || self.status.contains(Flags::MEMORY_SELECT) {
+                if self.a_u8_mode() {
                     Instruction::LoadAImmediate(Immediate::U8(self.fetch_u8(mmu)))
                 } else {
                     Instruction::LoadAImmediate(Immediate::U16(self.fetch_u16(mmu)))
@@ -222,7 +230,7 @@ impl Cpu {
             0xC8 => Instruction::IncrementY,
 
             0xC9 => {
-                if self.emulation || self.status.contains(Flags::MEMORY_SELECT) {
+                if self.a_u8_mode() {
                     Instruction::CompareImmediate(Immediate::U8(self.fetch_u8(mmu)))
                 } else {
                     Instruction::CompareImmediate(Immediate::U16(self.fetch_u16(mmu)))
@@ -236,7 +244,7 @@ impl Cpu {
             0xDF => Instruction::CompareAbsoluteLongIndexedX(self.fetch_long(mmu)),
 
             0xE0 => {
-                if self.emulation || self.status.contains(Flags::INDEX_REGISTER) {
+                if self.xy_u8_mode() {
                     Instruction::CompareXImmediate(Immediate::U8(self.fetch_u8(mmu)))
                 } else {
                     Instruction::CompareXImmediate(Immediate::U16(self.fetch_u16(mmu)))
@@ -404,7 +412,7 @@ impl Cpu {
             },
 
             Instruction::AddWithCarryAbsolute(addr) => {
-                if self.emulation || self.status.contains(Flags::MEMORY_SELECT) {
+                if self.a_u8_mode() {
                     adc_u8(
                         &mut self.a,
                         &mut self.status,
@@ -420,7 +428,7 @@ impl Cpu {
             }
 
             Instruction::AddWithCarryDirectPage(addr) => {
-                if self.emulation || self.status.contains(Flags::MEMORY_SELECT) {
+                if self.a_u8_mode() {
                     adc_u8(
                         &mut self.a,
                         &mut self.status,
@@ -603,7 +611,7 @@ impl Cpu {
             Instruction::BranchAlways(offset) => branch(&mut self.pc, offset, true),
 
             Instruction::PushA => {
-                if self.emulation || self.status.contains(Flags::MEMORY_SELECT) {
+                if self.a_u8_mode() {
                     self.push_u8(mmu, self.a as u8);
                 } else {
                     self.push_u16(mmu, self.a);
@@ -619,7 +627,7 @@ impl Cpu {
             }
 
             Instruction::PushX => {
-                if self.emulation || self.status.contains(Flags::INDEX_REGISTER) {
+                if self.xy_u8_mode() {
                     self.push_u8(mmu, self.x as u8);
                 } else {
                     self.push_u16(mmu, self.x);
@@ -627,7 +635,7 @@ impl Cpu {
             }
 
             Instruction::PushY => {
-                if self.emulation || self.status.contains(Flags::INDEX_REGISTER) {
+                if self.xy_u8_mode() {
                     self.push_u8(mmu, self.y as u8);
                 } else {
                     self.push_u16(mmu, self.y);
@@ -643,7 +651,7 @@ impl Cpu {
             }
 
             Instruction::PullA => {
-                if self.emulation || self.status.contains(Flags::MEMORY_SELECT) {
+                if self.a_u8_mode() {
                     let value = self.pull_u8(mmu);
                     load_u8(&mut self.a, &mut self.status, value);
                 } else {
@@ -668,7 +676,7 @@ impl Cpu {
             }
 
             Instruction::PullX => {
-                if self.emulation || self.status.contains(Flags::INDEX_REGISTER) {
+                if self.xy_u8_mode() {
                     let value = self.pull_u8(mmu);
                     load_u8(&mut self.x, &mut self.status, value);
                 } else {
@@ -678,7 +686,7 @@ impl Cpu {
             }
 
             Instruction::PullY => {
-                if self.emulation || self.status.contains(Flags::INDEX_REGISTER) {
+                if self.xy_u8_mode() {
                     let value = self.pull_u8(mmu);
                     load_u8(&mut self.y, &mut self.status, value);
                 } else {
