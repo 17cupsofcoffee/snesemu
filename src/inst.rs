@@ -1,45 +1,39 @@
 #[derive(Debug, Clone, Copy)]
-pub enum Immediate {
-    U8(u8),
-    U16(u16),
-}
-
-#[derive(Debug, Clone, Copy)]
 pub enum Instruction {
     Unknown,
 
     // Load from memory
-    LoadAImmediate(Immediate),
-    LoadAAbsolute(u16),
-    LoadADirectPage(u8),
-    LoadADirectPageIndirectLong(u8),
-    LoadAAbsoluteIndexedX(u16),
-    LoadAAbsoluteLongIndexedX(u32),
-    LoadAAbsoluteIndexedY(u16),
-    LoadXImmediate(Immediate),
-    LoadXDirectPage(u8),
-    LoadYImmediate(Immediate),
-    LoadYDirectPage(u8),
+    LoadAImmediate,
+    LoadAAbsolute,
+    LoadADirectPage,
+    LoadADirectPageIndirectLong,
+    LoadAAbsoluteIndexedX,
+    LoadAAbsoluteLongIndexedX,
+    LoadAAbsoluteIndexedY,
+    LoadXImmediate,
+    LoadXDirectPage,
+    LoadYImmediate,
+    LoadYDirectPage,
 
     // Store to memory
-    StoreAAbsolute(u16),
-    StoreADirectPage(u8),
-    StoreAAbsoluteIndexedX(u16),
-    StoreAAbsoluteLongIndexedX(u32),
-    StoreADirectPageIndexedX(u8),
-    StoreXAbsolute(u16),
-    StoreXDirectPage(u8),
-    StoreYDirectPage(u8),
-    StoreZeroAbsolute(u16),
-    StoreZeroDirectPage(u8),
-    StoreZeroAbsoluteIndexedX(u16),
-    StoreZeroDirectPageIndexedX(u8),
+    StoreAAbsolute,
+    StoreADirectPage,
+    StoreAAbsoluteIndexedX,
+    StoreAAbsoluteLongIndexedX,
+    StoreADirectPageIndexedX,
+    StoreXAbsolute,
+    StoreXDirectPage,
+    StoreYDirectPage,
+    StoreZeroAbsolute,
+    StoreZeroDirectPage,
+    StoreZeroAbsoluteIndexedX,
+    StoreZeroDirectPageIndexedX,
 
     // Arithmatic
-    AddWithCarryImmediate(Immediate),
-    AddWithCarryAbsolute(u16),
-    AddWithCarryDirectPage(u8),
-    IncrementDirectPage(u8),
+    AddWithCarryImmediate,
+    AddWithCarryAbsolute,
+    AddWithCarryDirectPage,
+    IncrementDirectPage,
     IncrementX,
     IncrementY,
     DecrementX,
@@ -56,21 +50,21 @@ pub enum Instruction {
     ExchangeBA,
 
     // Block moves
-    BlockMoveNext(u8, u8),
+    BlockMoveNext,
 
     // Logic
-    CompareImmediate(Immediate),
-    CompareAbsolute(u16),
-    CompareDirectPage(u8),
-    CompareAbsoluteLongIndexedX(u32),
-    CompareXImmediate(Immediate),
+    CompareImmediate,
+    CompareAbsolute,
+    CompareDirectPage,
+    CompareAbsoluteLongIndexedX,
+    CompareXImmediate,
 
     // Branching
-    BranchCarryClear(u8),
-    BranchCarrySet(u8),
-    BranchNotEqual(u8),
-    BranchEqual(u8),
-    BranchAlways(u8),
+    BranchCarryClear,
+    BranchCarrySet,
+    BranchNotEqual,
+    BranchEqual,
+    BranchAlways,
 
     // Push to stack
     PushA,
@@ -79,7 +73,7 @@ pub enum Instruction {
     PushX,
     PushY,
     PushStatus,
-    PushAbsolute(u16),
+    PushAbsolute,
 
     // Pull from stack
     PullA,
@@ -90,19 +84,19 @@ pub enum Instruction {
     PullStatus,
 
     // Jumps
-    JumpAbsolute(u16),
+    JumpAbsolute,
 
     // Subroutines
-    JumpSubRoutineAbsolute(u16),
-    JumpSubRoutineAbsoluteLong(u8, u16),
+    JumpSubRoutineAbsolute,
+    JumpSubRoutineAbsoluteLong,
     Return,
     ReturnLong,
 
     // Change status flags
     ClearCarry,
     SetIrqDisable,
-    ResetFlags(u8),
-    SetFlags(u8),
+    ResetFlags,
+    SetFlags,
     ExchangeCE,
 
     // Interrupts
@@ -110,143 +104,82 @@ pub enum Instruction {
 }
 
 impl Instruction {
-    pub fn asm(&self) -> String {
-        match self {
-            Instruction::Unknown => "???".into(),
+    pub fn from_opcode(opcode: u8) -> Instruction {
+        match opcode {
+            0x00 => Instruction::Break,
+            0x08 => Instruction::PushStatus,
+            0x0A => Instruction::ShiftLeft,
+            0x0B => Instruction::PushD,
+            0x18 => Instruction::ClearCarry,
+            0x20 => Instruction::JumpSubRoutineAbsolute,
+            0x22 => Instruction::JumpSubRoutineAbsoluteLong,
+            0x28 => Instruction::PullStatus,
+            0x2B => Instruction::PullD,
+            0x4C => Instruction::JumpAbsolute,
+            0x48 => Instruction::PushA,
+            0x54 => Instruction::BlockMoveNext,
+            0x5A => Instruction::PushY,
+            0x60 => Instruction::Return,
+            0x64 => Instruction::StoreZeroDirectPage,
+            0x65 => Instruction::AddWithCarryDirectPage,
+            0x68 => Instruction::PullA,
+            0x69 => Instruction::AddWithCarryImmediate,
+            0x6B => Instruction::ReturnLong,
+            0x6D => Instruction::AddWithCarryAbsolute,
+            0x74 => Instruction::StoreZeroDirectPageIndexedX,
+            0x78 => Instruction::SetIrqDisable,
+            0x7A => Instruction::PullY,
+            0x7B => Instruction::MoveDA,
+            0x80 => Instruction::BranchAlways,
+            0x84 => Instruction::StoreYDirectPage,
+            0x85 => Instruction::StoreADirectPage,
+            0x86 => Instruction::StoreXDirectPage,
+            0x88 => Instruction::DecrementY,
+            0x8B => Instruction::PushB,
+            0x8D => Instruction::StoreAAbsolute,
+            0x8E => Instruction::StoreXAbsolute,
+            0x90 => Instruction::BranchCarryClear,
+            0x95 => Instruction::StoreADirectPageIndexedX,
+            0x9A => Instruction::MoveXSP,
+            0x9C => Instruction::StoreZeroAbsolute,
+            0x9D => Instruction::StoreAAbsoluteIndexedX,
+            0x9E => Instruction::StoreZeroAbsoluteIndexedX,
+            0x9F => Instruction::StoreAAbsoluteLongIndexedX,
+            0xA0 => Instruction::LoadYImmediate,
+            0xA2 => Instruction::LoadXImmediate,
+            0xA4 => Instruction::LoadYDirectPage,
+            0xA5 => Instruction::LoadADirectPage,
+            0xA6 => Instruction::LoadXDirectPage,
+            0xA8 => Instruction::MoveAY,
+            0xA7 => Instruction::LoadADirectPageIndirectLong,
+            0xA9 => Instruction::LoadAImmediate,
+            0xAA => Instruction::MoveAX,
+            0xAB => Instruction::PullB,
+            0xAD => Instruction::LoadAAbsolute,
+            0xB0 => Instruction::BranchCarrySet,
+            0xB9 => Instruction::LoadAAbsoluteIndexedY,
+            0xBD => Instruction::LoadAAbsoluteIndexedX,
+            0xBF => Instruction::LoadAAbsoluteLongIndexedX,
+            0xC2 => Instruction::ResetFlags,
+            0xC5 => Instruction::CompareDirectPage,
+            0xC8 => Instruction::IncrementY,
+            0xC9 => Instruction::CompareImmediate,
+            0xCA => Instruction::DecrementX,
+            0xCD => Instruction::CompareAbsolute,
+            0xD0 => Instruction::BranchNotEqual,
+            0xDA => Instruction::PushX,
+            0xDF => Instruction::CompareAbsoluteLongIndexedX,
+            0xE0 => Instruction::CompareXImmediate,
+            0xE2 => Instruction::SetFlags,
+            0xE6 => Instruction::IncrementDirectPage,
+            0xE8 => Instruction::IncrementX,
+            0xEB => Instruction::ExchangeBA,
+            0xF0 => Instruction::BranchEqual,
+            0xF4 => Instruction::PushAbsolute,
+            0xFA => Instruction::PullX,
+            0xFB => Instruction::ExchangeCE,
 
-            Instruction::LoadAImmediate(imm) => immediate("LDA", imm),
-            Instruction::LoadAAbsolute(addr) => absolute("LDA", addr),
-            Instruction::LoadADirectPage(addr) => direct_page("LDA", addr),
-            Instruction::LoadADirectPageIndirectLong(addr) => {
-                direct_page_indirect_long("LDA", addr)
-            }
-            Instruction::LoadAAbsoluteIndexedX(addr) => absolute_indexed_x("LDA", addr),
-            Instruction::LoadAAbsoluteLongIndexedX(addr) => absolute_long_indexed_x("LDA", addr),
-            Instruction::LoadAAbsoluteIndexedY(addr) => absolute_indexed_y("LDA", addr),
-            Instruction::LoadXImmediate(imm) => immediate("LDX", imm),
-            Instruction::LoadXDirectPage(addr) => direct_page("LDX", addr),
-            Instruction::LoadYImmediate(imm) => immediate("LDY", imm),
-            Instruction::LoadYDirectPage(addr) => direct_page("LDY", addr),
-
-            Instruction::StoreAAbsolute(addr) => absolute("STA", addr),
-            Instruction::StoreADirectPage(addr) => direct_page("STA", addr),
-            Instruction::StoreAAbsoluteIndexedX(addr) => absolute_indexed_x("STA", addr),
-            Instruction::StoreAAbsoluteLongIndexedX(addr) => absolute_long_indexed_x("STA", addr),
-            Instruction::StoreADirectPageIndexedX(addr) => direct_page_indexed_x("STA", addr),
-            Instruction::StoreXAbsolute(addr) => absolute("STX", addr),
-            Instruction::StoreXDirectPage(addr) => direct_page("STX", addr),
-            Instruction::StoreYDirectPage(addr) => direct_page("STY", addr),
-            Instruction::StoreZeroAbsolute(addr) => absolute("STZ", addr),
-            Instruction::StoreZeroDirectPage(addr) => direct_page("STZ", addr),
-            Instruction::StoreZeroAbsoluteIndexedX(addr) => absolute_indexed_x("STZ", addr),
-            Instruction::StoreZeroDirectPageIndexedX(addr) => direct_page_indexed_x("STZ", addr),
-
-            Instruction::AddWithCarryImmediate(imm) => immediate("ADC", imm),
-            Instruction::AddWithCarryAbsolute(addr) => absolute("ADC", addr),
-            Instruction::AddWithCarryDirectPage(addr) => direct_page("ADC", addr),
-            Instruction::IncrementDirectPage(addr) => direct_page("INC", addr),
-            Instruction::IncrementX => "INX".into(),
-            Instruction::IncrementY => "INY".into(),
-            Instruction::DecrementX => "DEX".into(),
-            Instruction::DecrementY => "DEY".into(),
-
-            Instruction::ShiftLeft => "ASL".into(),
-
-            Instruction::MoveAX => "TAX".into(),
-            Instruction::MoveAY => "TAY".into(),
-            Instruction::MoveDA => "TDC".into(),
-            Instruction::MoveXSP => "TXS".into(),
-            Instruction::ExchangeBA => "XBA".into(),
-
-            Instruction::BlockMoveNext(dest, src) => format!("MVN ${:02X},${:02X}", src, dest),
-
-            Instruction::CompareImmediate(imm) => immediate("CMP", imm),
-            Instruction::CompareAbsolute(addr) => absolute("CMP", addr),
-            Instruction::CompareDirectPage(addr) => direct_page("CMP", addr),
-            Instruction::CompareAbsoluteLongIndexedX(addr) => absolute_long_indexed_x("CMP", addr),
-            Instruction::CompareXImmediate(imm) => immediate("CPX", imm),
-
-            Instruction::BranchCarryClear(offset) => branch("BCC", offset),
-            Instruction::BranchCarrySet(offset) => branch("BCS", offset),
-            Instruction::BranchNotEqual(offset) => branch("BNE", offset),
-            Instruction::BranchEqual(offset) => branch("BEQ", offset),
-            Instruction::BranchAlways(offset) => branch("BRA", offset),
-
-            Instruction::PushA => "PHA".into(),
-            Instruction::PushB => "PHB".into(),
-            Instruction::PushD => "PHD".into(),
-            Instruction::PushX => "PHX".into(),
-            Instruction::PushY => "PHY".into(),
-            Instruction::PushStatus => "PHP".into(),
-            Instruction::PushAbsolute(addr) => absolute("PEA", addr),
-            Instruction::PullA => "PLA".into(),
-            Instruction::PullB => "PLB".into(),
-            Instruction::PullD => "PLD".into(),
-            Instruction::PullX => "PLX".into(),
-            Instruction::PullY => "PLY".into(),
-            Instruction::PullStatus => "PLP".into(),
-
-            Instruction::JumpAbsolute(addr) => absolute("JMP", addr),
-
-            Instruction::JumpSubRoutineAbsolute(addr) => absolute("JSR", addr),
-            Instruction::JumpSubRoutineAbsoluteLong(bank, addr) => absolute_long("JSL", bank, addr),
-            Instruction::Return => "RTS".into(),
-            Instruction::ReturnLong => "RTL".into(),
-
-            Instruction::ClearCarry => "CLC".into(),
-            Instruction::SetIrqDisable => "SEI".into(),
-            Instruction::ResetFlags(mask) => format!("REP #${:02X}", mask),
-            Instruction::SetFlags(mask) => format!("SEP #${:02X}", mask),
-            Instruction::ExchangeCE => "XCE".into(),
-
-            Instruction::Break => "BRK".into(),
+            _ => Instruction::Unknown,
         }
     }
-}
-
-fn immediate(opcode: &str, imm: &Immediate) -> String {
-    match imm {
-        Immediate::U8(v) => format!("{} #${:02X}", opcode, v),
-        Immediate::U16(v) => format!("{} #${:04X}", opcode, v),
-    }
-}
-
-fn absolute(opcode: &str, addr: &u16) -> String {
-    format!("{} ${:04X}", opcode, addr)
-}
-
-fn absolute_long(opcode: &str, bank: &u8, addr: &u16) -> String {
-    format!("{} ${:02X}{:04X}", opcode, bank, addr)
-}
-
-fn direct_page(opcode: &str, addr: &u8) -> String {
-    format!("{} ${:02X}", opcode, addr)
-}
-
-fn direct_page_indexed_x(opcode: &str, addr: &u8) -> String {
-    format!("{} ${:02X},X", opcode, addr)
-}
-
-fn direct_page_indirect_long(opcode: &str, addr: &u8) -> String {
-    format!("{} [${:02X}]", opcode, addr)
-}
-
-fn absolute_indexed_x(opcode: &str, addr: &u16) -> String {
-    format!("{} ${:04X},X", opcode, addr)
-}
-
-fn absolute_long_indexed_x(opcode: &str, addr: &u32) -> String {
-    format!("{} ${:04X},X", opcode, addr)
-}
-
-fn absolute_indexed_y(opcode: &str, addr: &u16) -> String {
-    format!("{} ${:04X},Y", opcode, addr)
-}
-
-fn branch(opcode: &str, offset: &u8) -> String {
-    let sign_bit = offset >> 7;
-    let value = if sign_bit == 1 { !offset + 1 } else { *offset };
-    let sign = if sign_bit == 1 { "-" } else { "+" };
-
-    format!("{} {}${:02X}", opcode, sign, value)
 }

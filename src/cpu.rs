@@ -5,7 +5,7 @@ use std::fmt::Write;
 use bitflags::bitflags;
 
 use self::ops::*;
-use crate::inst::{Immediate, Instruction};
+use crate::inst::Instruction;
 use crate::mmu::Mmu;
 
 fn bank_addr(bank: u8, addr: u16) -> u32 {
@@ -42,7 +42,6 @@ pub struct Cpu {
 
     // Debug info
     sp_base: u16,
-    last_instruction: Instruction,
 }
 
 impl Cpu {
@@ -64,7 +63,6 @@ impl Cpu {
             emulation: true,
 
             sp_base: 0x1FF,
-            last_instruction: Instruction::Unknown,
         }
     }
 
@@ -83,10 +81,6 @@ impl Cpu {
 
     pub fn xy_u8_mode(&self) -> bool {
         self.emulation || self.status.contains(Flags::INDEX_REGISTER)
-    }
-
-    pub fn last_instruction(&self) -> Instruction {
-        self.last_instruction
     }
 
     fn fetch_u8(&mut self, mmu: &Mmu) -> u8 {
@@ -130,154 +124,27 @@ impl Cpu {
         mmu.read_u16(self.sp as u32 - 1)
     }
 
-    fn fetch(&mut self, mmu: &Mmu) -> Instruction {
-        let opcode = self.fetch_u8(mmu);
-
-        match opcode {
-            0x00 => Instruction::Break,
-            0x08 => Instruction::PushStatus,
-            0x0A => Instruction::ShiftLeft,
-            0x0B => Instruction::PushD,
-            0x18 => Instruction::ClearCarry,
-            0x20 => Instruction::JumpSubRoutineAbsolute(self.fetch_u16(mmu)),
-
-            0x22 => {
-                let addr = self.fetch_u16(mmu);
-                let bank = self.fetch_u8(mmu);
-
-                Instruction::JumpSubRoutineAbsoluteLong(bank, addr)
-            }
-
-            0x28 => Instruction::PullStatus,
-            0x2B => Instruction::PullD,
-            0x4C => Instruction::JumpAbsolute(self.fetch_u16(mmu)),
-            0x48 => Instruction::PushA,
-            0x54 => Instruction::BlockMoveNext(self.fetch_u8(mmu), self.fetch_u8(mmu)),
-            0x5A => Instruction::PushY,
-            0x60 => Instruction::Return,
-            0x64 => Instruction::StoreZeroDirectPage(self.fetch_u8(mmu)),
-            0x65 => Instruction::AddWithCarryDirectPage(self.fetch_u8(mmu)),
-            0x68 => Instruction::PullA,
-
-            0x69 => {
-                if self.xy_u8_mode() {
-                    Instruction::AddWithCarryImmediate(Immediate::U8(self.fetch_u8(mmu)))
-                } else {
-                    Instruction::AddWithCarryImmediate(Immediate::U16(self.fetch_u16(mmu)))
-                }
-            }
-
-            0x6B => Instruction::ReturnLong,
-            0x6D => Instruction::AddWithCarryAbsolute(self.fetch_u16(mmu)),
-            0x74 => Instruction::StoreZeroDirectPageIndexedX(self.fetch_u8(mmu)),
-            0x78 => Instruction::SetIrqDisable,
-            0x7A => Instruction::PullY,
-            0x7B => Instruction::MoveDA,
-            0x80 => Instruction::BranchAlways(self.fetch_u8(mmu)),
-            0x84 => Instruction::StoreYDirectPage(self.fetch_u8(mmu)),
-            0x85 => Instruction::StoreADirectPage(self.fetch_u8(mmu)),
-            0x86 => Instruction::StoreXDirectPage(self.fetch_u8(mmu)),
-            0x88 => Instruction::DecrementY,
-            0x8B => Instruction::PushB,
-            0x8D => Instruction::StoreAAbsolute(self.fetch_u16(mmu)),
-            0x8E => Instruction::StoreXAbsolute(self.fetch_u16(mmu)),
-            0x90 => Instruction::BranchCarryClear(self.fetch_u8(mmu)),
-            0x95 => Instruction::StoreADirectPageIndexedX(self.fetch_u8(mmu)),
-            0x9A => Instruction::MoveXSP,
-            0x9C => Instruction::StoreZeroAbsolute(self.fetch_u16(mmu)),
-            0x9D => Instruction::StoreAAbsoluteIndexedX(self.fetch_u16(mmu)),
-            0x9E => Instruction::StoreZeroAbsoluteIndexedX(self.fetch_u16(mmu)),
-            0x9F => Instruction::StoreAAbsoluteLongIndexedX(self.fetch_long(mmu)),
-
-            0xA0 => {
-                if self.xy_u8_mode() {
-                    Instruction::LoadYImmediate(Immediate::U8(self.fetch_u8(mmu)))
-                } else {
-                    Instruction::LoadYImmediate(Immediate::U16(self.fetch_u16(mmu)))
-                }
-            }
-
-            0xA2 => {
-                if self.xy_u8_mode() {
-                    Instruction::LoadXImmediate(Immediate::U8(self.fetch_u8(mmu)))
-                } else {
-                    Instruction::LoadXImmediate(Immediate::U16(self.fetch_u16(mmu)))
-                }
-            }
-
-            0xA4 => Instruction::LoadYDirectPage(self.fetch_u8(mmu)),
-            0xA5 => Instruction::LoadADirectPage(self.fetch_u8(mmu)),
-            0xA6 => Instruction::LoadXDirectPage(self.fetch_u8(mmu)),
-            0xA8 => Instruction::MoveAY,
-            0xA7 => Instruction::LoadADirectPageIndirectLong(self.fetch_u8(mmu)),
-
-            0xA9 => {
-                if self.a_u8_mode() {
-                    Instruction::LoadAImmediate(Immediate::U8(self.fetch_u8(mmu)))
-                } else {
-                    Instruction::LoadAImmediate(Immediate::U16(self.fetch_u16(mmu)))
-                }
-            }
-
-            0xAA => Instruction::MoveAX,
-            0xAB => Instruction::PullB,
-            0xAD => Instruction::LoadAAbsolute(self.fetch_u16(mmu)),
-            0xB0 => Instruction::BranchCarrySet(self.fetch_u8(mmu)),
-            0xB9 => Instruction::LoadAAbsoluteIndexedY(self.fetch_u16(mmu)),
-            0xBD => Instruction::LoadAAbsoluteIndexedX(self.fetch_u16(mmu)),
-            0xBF => Instruction::LoadAAbsoluteLongIndexedX(self.fetch_long(mmu)),
-            0xC2 => Instruction::ResetFlags(self.fetch_u8(mmu)),
-            0xC5 => Instruction::CompareDirectPage(self.fetch_u8(mmu)),
-            0xC8 => Instruction::IncrementY,
-
-            0xC9 => {
-                if self.a_u8_mode() {
-                    Instruction::CompareImmediate(Immediate::U8(self.fetch_u8(mmu)))
-                } else {
-                    Instruction::CompareImmediate(Immediate::U16(self.fetch_u16(mmu)))
-                }
-            }
-
-            0xCA => Instruction::DecrementX,
-            0xCD => Instruction::CompareAbsolute(self.fetch_u16(mmu)),
-            0xD0 => Instruction::BranchNotEqual(self.fetch_u8(mmu)),
-            0xDA => Instruction::PushX,
-            0xDF => Instruction::CompareAbsoluteLongIndexedX(self.fetch_long(mmu)),
-
-            0xE0 => {
-                if self.xy_u8_mode() {
-                    Instruction::CompareXImmediate(Immediate::U8(self.fetch_u8(mmu)))
-                } else {
-                    Instruction::CompareXImmediate(Immediate::U16(self.fetch_u16(mmu)))
-                }
-            }
-
-            0xE2 => Instruction::SetFlags(self.fetch_u8(mmu)),
-            0xE6 => Instruction::IncrementDirectPage(self.fetch_u8(mmu)),
-            0xE8 => Instruction::IncrementX,
-            0xEB => Instruction::ExchangeBA,
-            0xF0 => Instruction::BranchEqual(self.fetch_u8(mmu)),
-            0xF4 => Instruction::PushAbsolute(self.fetch_u16(mmu)),
-            0xFA => Instruction::PullX,
-            0xFB => Instruction::ExchangeCE,
-
-            _ => Instruction::Unknown,
-        }
-    }
-
     pub fn tick(&mut self, mmu: &mut Mmu) {
-        let inst = self.fetch(mmu);
+        let opcode = self.fetch_u8(mmu);
+        let inst = Instruction::from_opcode(opcode);
 
         match inst {
             Instruction::Unknown { .. } => {}
 
-            Instruction::LoadAImmediate(imm) => match imm {
-                Immediate::U8(value) => load_u8(&mut self.a, &mut self.status, value),
-                Immediate::U16(value) => load_u16(&mut self.a, &mut self.status, value),
-            },
+            Instruction::LoadAImmediate => {
+                if self.a_u8_mode() {
+                    let value = self.fetch_u8(mmu);
+                    load_u8(&mut self.a, &mut self.status, value);
+                } else {
+                    let value = self.fetch_u16(mmu);
+                    load_u16(&mut self.a, &mut self.status, value);
+                }
+            }
 
-            Instruction::LoadAAbsolute(addr) => {
+            Instruction::LoadAAbsolute => {
                 // TODO: 16 bit mode
+                let addr = self.fetch_u16(mmu);
+
                 load_u8(
                     &mut self.a,
                     &mut self.status,
@@ -285,8 +152,10 @@ impl Cpu {
                 )
             }
 
-            Instruction::LoadADirectPage(addr) => {
+            Instruction::LoadADirectPage => {
                 // TODO: 16 bit mode
+                let addr = self.fetch_u8(mmu);
+
                 load_u8(
                     &mut self.a,
                     &mut self.status,
@@ -294,15 +163,19 @@ impl Cpu {
                 )
             }
 
-            Instruction::LoadADirectPageIndirectLong(addr) => {
+            Instruction::LoadADirectPageIndirectLong => {
+                let addr = self.fetch_u8(mmu);
+
                 let ptr = mmu.read_long(self.direct_page as u32 + addr as u32);
 
                 // TODO: 16 bit mode
                 load_u8(&mut self.a, &mut self.status, mmu.read_u8(ptr))
             }
 
-            Instruction::LoadAAbsoluteIndexedX(addr) => {
+            Instruction::LoadAAbsoluteIndexedX => {
                 // TODO: 16 bit mode
+                let addr = self.fetch_u16(mmu);
+
                 load_u8(
                     &mut self.a,
                     &mut self.status,
@@ -310,8 +183,9 @@ impl Cpu {
                 )
             }
 
-            Instruction::LoadAAbsoluteLongIndexedX(addr) => {
+            Instruction::LoadAAbsoluteLongIndexedX => {
                 // TODO: 16 bit mode
+                let addr = self.fetch_long(mmu);
 
                 load_u8(
                     &mut self.a,
@@ -320,8 +194,10 @@ impl Cpu {
                 )
             }
 
-            Instruction::LoadAAbsoluteIndexedY(addr) => {
+            Instruction::LoadAAbsoluteIndexedY => {
                 // TODO: 16 bit mode
+                let addr = self.fetch_u16(mmu);
+
                 load_u8(
                     &mut self.a,
                     &mut self.status,
@@ -329,13 +205,20 @@ impl Cpu {
                 )
             }
 
-            Instruction::LoadXImmediate(imm) => match imm {
-                Immediate::U8(value) => load_u8(&mut self.x, &mut self.status, value),
-                Immediate::U16(value) => load_u16(&mut self.x, &mut self.status, value),
-            },
+            Instruction::LoadXImmediate => {
+                if self.xy_u8_mode() {
+                    let value = self.fetch_u8(mmu);
+                    load_u8(&mut self.x, &mut self.status, value);
+                } else {
+                    let value = self.fetch_u16(mmu);
+                    load_u16(&mut self.x, &mut self.status, value)
+                }
+            }
 
-            Instruction::LoadXDirectPage(addr) => {
+            Instruction::LoadXDirectPage => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_u8(mmu);
+
                 load_u16(
                     &mut self.x,
                     &mut self.status,
@@ -343,13 +226,20 @@ impl Cpu {
                 )
             }
 
-            Instruction::LoadYImmediate(imm) => match imm {
-                Immediate::U8(value) => load_u8(&mut self.y, &mut self.status, value),
-                Immediate::U16(value) => load_u16(&mut self.y, &mut self.status, value),
-            },
+            Instruction::LoadYImmediate => {
+                if self.xy_u8_mode() {
+                    let value = self.fetch_u8(mmu);
+                    load_u8(&mut self.y, &mut self.status, value);
+                } else {
+                    let value = self.fetch_u16(mmu);
+                    load_u16(&mut self.y, &mut self.status, value)
+                }
+            }
 
-            Instruction::LoadYDirectPage(addr) => {
+            Instruction::LoadYDirectPage => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_u8(mmu);
+
                 load_u16(
                     &mut self.y,
                     &mut self.status,
@@ -357,71 +247,102 @@ impl Cpu {
                 )
             }
 
-            Instruction::StoreAAbsolute(addr) => {
+            Instruction::StoreAAbsolute => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_u16(mmu);
+
                 mmu.store_u16(bank_addr(self.data_bank, addr), self.a);
             }
 
-            Instruction::StoreADirectPage(addr) => {
+            Instruction::StoreADirectPage => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_u8(mmu);
+
                 mmu.store_u16(self.direct_page as u32 + addr as u32, self.a);
             }
 
-            Instruction::StoreAAbsoluteIndexedX(addr) => {
+            Instruction::StoreAAbsoluteIndexedX => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_u16(mmu);
+
                 mmu.store_u16(bank_addr(self.data_bank, addr) + self.x as u32, self.a);
             }
 
-            Instruction::StoreAAbsoluteLongIndexedX(addr) => {
+            Instruction::StoreAAbsoluteLongIndexedX => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_long(mmu);
+
                 mmu.store_u16(addr + self.x as u32, self.a);
             }
 
-            Instruction::StoreADirectPageIndexedX(addr) => {
+            Instruction::StoreADirectPageIndexedX => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_u8(mmu);
+
                 mmu.store_u16(
                     self.direct_page as u32 + addr as u32 + self.x as u32,
                     self.a,
                 );
             }
 
-            Instruction::StoreXAbsolute(addr) => {
+            Instruction::StoreXAbsolute => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_u16(mmu);
+
                 mmu.store_u16(bank_addr(self.data_bank, addr), self.x);
             }
 
-            Instruction::StoreXDirectPage(addr) => {
+            Instruction::StoreXDirectPage => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_u8(mmu);
+
                 mmu.store_u16(self.direct_page as u32 + addr as u32, self.x);
             }
 
-            Instruction::StoreYDirectPage(addr) => {
+            Instruction::StoreYDirectPage => {
                 // TODO: 8 bit mode?
+                let addr = self.fetch_u8(mmu);
+
                 mmu.store_u16(self.direct_page as u32 + addr as u32, self.y);
             }
 
-            Instruction::StoreZeroAbsolute(addr) => {
+            Instruction::StoreZeroAbsolute => {
+                let addr = self.fetch_u16(mmu);
+
                 mmu.store_u8(bank_addr(self.data_bank, addr), 0);
             }
 
-            Instruction::StoreZeroDirectPage(addr) => {
+            Instruction::StoreZeroDirectPage => {
+                let addr = self.fetch_u16(mmu);
+
                 mmu.store_u8(self.direct_page as u32 + addr as u32, 0);
             }
 
-            Instruction::StoreZeroAbsoluteIndexedX(addr) => {
+            Instruction::StoreZeroAbsoluteIndexedX => {
+                let addr = self.fetch_u16(mmu);
+
                 mmu.store_u8(bank_addr(self.data_bank, addr) + self.x as u32, 0);
             }
 
-            Instruction::StoreZeroDirectPageIndexedX(addr) => {
+            Instruction::StoreZeroDirectPageIndexedX => {
+                let addr = self.fetch_u8(mmu);
+
                 mmu.store_u8(self.direct_page as u32 + addr as u32 + self.x as u32, 0);
             }
 
-            Instruction::AddWithCarryImmediate(imm) => match imm {
-                Immediate::U8(value) => adc_u8(&mut self.a, &mut self.status, value),
-                Immediate::U16(value) => adc_u16(&mut self.a, &mut self.status, value),
-            },
+            Instruction::AddWithCarryImmediate => {
+                if self.a_u8_mode() {
+                    let value = self.fetch_u8(mmu);
+                    adc_u8(&mut self.a, &mut self.status, value)
+                } else {
+                    let value = self.fetch_u16(mmu);
+                    adc_u16(&mut self.a, &mut self.status, value)
+                }
+            }
 
-            Instruction::AddWithCarryAbsolute(addr) => {
+            Instruction::AddWithCarryAbsolute => {
+                let addr = self.fetch_u16(mmu);
+
                 if self.a_u8_mode() {
                     adc_u8(
                         &mut self.a,
@@ -437,7 +358,9 @@ impl Cpu {
                 }
             }
 
-            Instruction::AddWithCarryDirectPage(addr) => {
+            Instruction::AddWithCarryDirectPage => {
+                let addr = self.fetch_u8(mmu);
+
                 if self.a_u8_mode() {
                     adc_u8(
                         &mut self.a,
@@ -453,7 +376,9 @@ impl Cpu {
                 }
             }
 
-            Instruction::IncrementDirectPage(addr) => {
+            Instruction::IncrementDirectPage => {
+                let addr = self.fetch_u8(mmu);
+
                 let offset_addr = self.direct_page as u32 + addr as u32;
                 let value = mmu.read_u8(offset_addr).wrapping_add(1);
 
@@ -548,8 +473,10 @@ impl Cpu {
                 self.status.set(Flags::ZERO, (self.a & 1) == 1);
             }
 
-            Instruction::BlockMoveNext(dest, src) => {
+            Instruction::BlockMoveNext => {
                 // TODO: 8 bit index registers - tbh I'm not sure about this one
+                let dest = self.fetch_u8(mmu);
+                let src = self.fetch_u8(mmu);
 
                 self.data_bank = dest;
 
@@ -565,13 +492,20 @@ impl Cpu {
                 }
             }
 
-            Instruction::CompareImmediate(imm) => match imm {
-                Immediate::U8(value) => compare_u8(&mut self.status, self.a as u8, value),
-                Immediate::U16(value) => compare_u16(&mut self.status, self.a, value),
-            },
+            Instruction::CompareImmediate => {
+                if self.a_u8_mode() {
+                    let value = self.fetch_u8(mmu);
+                    compare_u8(&mut self.status, self.a as u8, value)
+                } else {
+                    let value = self.fetch_u16(mmu);
+                    compare_u16(&mut self.status, self.a, value)
+                }
+            }
 
-            Instruction::CompareAbsolute(addr) => {
+            Instruction::CompareAbsolute => {
                 // TODO: 16 bit mode?
+                let addr = self.fetch_u16(mmu);
+
                 compare_u8(
                     &mut self.status,
                     self.a as u8,
@@ -579,8 +513,10 @@ impl Cpu {
                 )
             }
 
-            Instruction::CompareDirectPage(addr) => {
+            Instruction::CompareDirectPage => {
                 // TODO: 16 bit mode?
+                let addr = self.fetch_u8(mmu);
+
                 compare_u8(
                     &mut self.status,
                     self.a as u8,
@@ -588,8 +524,10 @@ impl Cpu {
                 )
             }
 
-            Instruction::CompareAbsoluteLongIndexedX(addr) => {
+            Instruction::CompareAbsoluteLongIndexedX => {
                 // TODO: 16 bit mode?
+                let addr = self.fetch_long(mmu);
+
                 compare_u8(
                     &mut self.status,
                     self.a as u8,
@@ -597,28 +535,44 @@ impl Cpu {
                 )
             }
 
-            Instruction::CompareXImmediate(imm) => match imm {
-                Immediate::U8(value) => compare_u8(&mut self.status, self.x as u8, value),
-                Immediate::U16(value) => compare_u16(&mut self.status, self.x, value),
-            },
+            Instruction::CompareXImmediate => {
+                if self.xy_u8_mode() {
+                    let value = self.fetch_u8(mmu);
+                    compare_u8(&mut self.status, self.x as u8, value)
+                } else {
+                    let value = self.fetch_u16(mmu);
+                    compare_u16(&mut self.status, self.x, value)
+                }
+            }
 
-            Instruction::BranchCarryClear(offset) => {
+            Instruction::BranchCarryClear => {
+                let offset = self.fetch_u8(mmu);
+
                 branch(&mut self.pc, offset, !self.status.contains(Flags::CARRY))
             }
 
-            Instruction::BranchCarrySet(offset) => {
+            Instruction::BranchCarrySet => {
+                let offset = self.fetch_u8(mmu);
+
                 branch(&mut self.pc, offset, self.status.contains(Flags::CARRY))
             }
 
-            Instruction::BranchNotEqual(offset) => {
+            Instruction::BranchNotEqual => {
+                let offset = self.fetch_u8(mmu);
+
                 branch(&mut self.pc, offset, !self.status.contains(Flags::ZERO))
             }
 
-            Instruction::BranchEqual(offset) => {
+            Instruction::BranchEqual => {
+                let offset = self.fetch_u8(mmu);
+
                 branch(&mut self.pc, offset, self.status.contains(Flags::ZERO))
             }
 
-            Instruction::BranchAlways(offset) => branch(&mut self.pc, offset, true),
+            Instruction::BranchAlways => {
+                let offset = self.fetch_u8(mmu);
+                branch(&mut self.pc, offset, true)
+            }
 
             Instruction::PushA => {
                 if self.a_u8_mode() {
@@ -656,7 +610,9 @@ impl Cpu {
                 self.push_u8(mmu, self.status.bits());
             }
 
-            Instruction::PushAbsolute(addr) => {
+            Instruction::PushAbsolute => {
+                let addr = self.fetch_u16(mmu);
+
                 self.push_u16(mmu, addr);
             }
 
@@ -714,17 +670,24 @@ impl Cpu {
                 self.status.set(Flags::ZERO, value == 0);
             }
 
-            Instruction::JumpAbsolute(addr) => {
+            Instruction::JumpAbsolute => {
+                let addr = self.fetch_u16(mmu);
+
                 self.pc = addr;
             }
 
-            Instruction::JumpSubRoutineAbsolute(addr) => {
+            Instruction::JumpSubRoutineAbsolute => {
+                let addr = self.fetch_u16(mmu);
+
                 self.push_u16(mmu, self.pc - 1); // TODO: bytes are reversed
 
                 self.pc = addr;
             }
 
-            Instruction::JumpSubRoutineAbsoluteLong(bank, addr) => {
+            Instruction::JumpSubRoutineAbsoluteLong => {
+                let addr = self.fetch_u16(mmu);
+                let bank = self.fetch_u8(mmu);
+
                 self.push_u16(mmu, self.pc - 1); // TODO: bytes are reversed
                 self.push_u8(mmu, self.program_bank);
 
@@ -754,11 +717,15 @@ impl Cpu {
                 self.status.insert(Flags::IRQ_DISABLE);
             }
 
-            Instruction::ResetFlags(mask) => {
+            Instruction::ResetFlags => {
+                let mask = self.fetch_u8(mmu);
+
                 self.status &= !Flags::from_bits_truncate(mask);
             }
 
-            Instruction::SetFlags(mask) => {
+            Instruction::SetFlags => {
+                let mask = self.fetch_u8(mmu);
+
                 self.status |= Flags::from_bits_truncate(mask);
             }
 
@@ -773,8 +740,6 @@ impl Cpu {
                 // TODO: Probably not right but let's see if it works
             }
         }
-
-        self.last_instruction = inst;
     }
 
     pub fn register_debug(&self) -> String {

@@ -20,20 +20,21 @@ fn main() {
     loop {
         let current_addr = cpu.current_addr();
         let opcode = mmu.read_u8(cpu.current_addr());
+        let inst = Instruction::from_opcode(opcode);
 
         cpu.tick(&mut mmu);
 
         let _ = writeln!(
             output,
-            "[{:>06X}] {:02X} {}\n         {}\n         Stack: [{}]",
+            "[{:>06X}] {:02X} {:?}\n         {}\n         Stack: [{}]",
             current_addr,
             opcode,
-            cpu.last_instruction().asm(),
+            inst,
             cpu.register_debug(),
             cpu.stack_debug(&mmu)
         );
 
-        if let Instruction::Unknown = cpu.last_instruction() {
+        if let Instruction::Unknown = inst {
             break;
         }
     }
