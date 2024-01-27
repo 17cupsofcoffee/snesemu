@@ -313,7 +313,7 @@ impl Cpu {
             }
 
             Instruction::StoreZeroDirectPage => {
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_u8(mmu);
 
                 mmu.store_u8(self.direct_page as u32 + addr as u32, 0);
             }
