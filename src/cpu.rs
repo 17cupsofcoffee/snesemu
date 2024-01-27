@@ -12,6 +12,16 @@ fn bank_addr(bank: u8, addr: u16) -> u32 {
     (bank as u32) << 16 | (addr as u32)
 }
 
+enum AddressingMode {
+    Absolute,
+    DirectPage,
+    DirectPageIndirectLong,
+    AbsoluteIndexedX,
+    AbsoluteLongIndexedX,
+    AbsoluteIndexedY,
+    DirectPageIndexedX,
+}
+
 bitflags! {
     pub struct Flags: u8 {
         const CARRY          = 0b00000001;
@@ -104,6 +114,52 @@ impl Cpu {
         value
     }
 
+    fn fetch_addr(&mut self, mmu: &Mmu, addr_mode: AddressingMode) -> u32 {
+        match addr_mode {
+            AddressingMode::Absolute => {
+                let addr = self.fetch_u16(mmu);
+
+                bank_addr(self.data_bank, addr)
+            }
+
+            AddressingMode::DirectPage => {
+                let addr = self.fetch_u8(mmu);
+
+                self.direct_page as u32 + addr as u32
+            }
+
+            AddressingMode::DirectPageIndirectLong => {
+                let ptr = self.fetch_addr(mmu, AddressingMode::DirectPage);
+
+                mmu.read_long(ptr)
+            }
+
+            AddressingMode::AbsoluteIndexedX => {
+                let addr = self.fetch_u16(mmu);
+
+                bank_addr(self.data_bank, addr) + self.x as u32
+            }
+
+            AddressingMode::AbsoluteLongIndexedX => {
+                let addr = self.fetch_long(mmu);
+
+                addr + self.x as u32
+            }
+
+            AddressingMode::AbsoluteIndexedY => {
+                let addr = self.fetch_u16(mmu);
+
+                bank_addr(self.data_bank, addr) + self.y as u32
+            }
+
+            AddressingMode::DirectPageIndexedX => {
+                let addr = self.fetch_u8(mmu);
+
+                self.direct_page as u32 + addr as u32 + self.x as u32
+            }
+        }
+    }
+
     fn push_u8(&mut self, mmu: &mut Mmu, value: u8) {
         mmu.store_u8(self.sp as u32, value);
         self.sp -= 1;
@@ -143,66 +199,44 @@ impl Cpu {
 
             Instruction::LoadAAbsolute => {
                 // TODO: 16 bit mode
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
 
-                load_u8(
-                    &mut self.a,
-                    &mut self.status,
-                    mmu.read_u8(bank_addr(self.data_bank, addr)),
-                )
+                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
             }
 
             Instruction::LoadADirectPage => {
                 // TODO: 16 bit mode
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
 
-                load_u8(
-                    &mut self.a,
-                    &mut self.status,
-                    mmu.read_u8(self.direct_page as u32 + addr as u32),
-                )
+                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
             }
 
             Instruction::LoadADirectPageIndirectLong => {
-                let addr = self.fetch_u8(mmu);
-
-                let ptr = mmu.read_long(self.direct_page as u32 + addr as u32);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPageIndirectLong);
 
                 // TODO: 16 bit mode
-                load_u8(&mut self.a, &mut self.status, mmu.read_u8(ptr))
+                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
             }
 
             Instruction::LoadAAbsoluteIndexedX => {
                 // TODO: 16 bit mode
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteIndexedX);
 
-                load_u8(
-                    &mut self.a,
-                    &mut self.status,
-                    mmu.read_u8(bank_addr(self.data_bank, addr) + self.x as u32),
-                )
+                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
             }
 
             Instruction::LoadAAbsoluteLongIndexedX => {
                 // TODO: 16 bit mode
-                let addr = self.fetch_long(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteLongIndexedX);
 
-                load_u8(
-                    &mut self.a,
-                    &mut self.status,
-                    mmu.read_u8(addr + self.x as u32),
-                )
+                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
             }
 
             Instruction::LoadAAbsoluteIndexedY => {
                 // TODO: 16 bit mode
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteIndexedY);
 
-                load_u8(
-                    &mut self.a,
-                    &mut self.status,
-                    mmu.read_u8(bank_addr(self.data_bank, addr) + self.y as u32),
-                )
+                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
             }
 
             Instruction::LoadXImmediate => {
@@ -217,13 +251,9 @@ impl Cpu {
 
             Instruction::LoadXDirectPage => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
 
-                load_u16(
-                    &mut self.x,
-                    &mut self.status,
-                    mmu.read_u16(self.direct_page as u32 + addr as u32),
-                )
+                load_u16(&mut self.x, &mut self.status, mmu.read_u16(addr))
             }
 
             Instruction::LoadYImmediate => {
@@ -238,96 +268,89 @@ impl Cpu {
 
             Instruction::LoadYDirectPage => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
 
-                load_u16(
-                    &mut self.y,
-                    &mut self.status,
-                    mmu.read_u16(self.direct_page as u32 + addr as u32),
-                )
+                load_u16(&mut self.y, &mut self.status, mmu.read_u16(addr))
             }
 
             Instruction::StoreAAbsolute => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
 
-                mmu.store_u16(bank_addr(self.data_bank, addr), self.a);
+                mmu.store_u16(addr, self.a);
             }
 
             Instruction::StoreADirectPage => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
 
-                mmu.store_u16(self.direct_page as u32 + addr as u32, self.a);
+                mmu.store_u16(addr, self.a);
             }
 
             Instruction::StoreAAbsoluteIndexedX => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteIndexedX);
 
-                mmu.store_u16(bank_addr(self.data_bank, addr) + self.x as u32, self.a);
+                mmu.store_u16(addr, self.a);
             }
 
             Instruction::StoreAAbsoluteLongIndexedX => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_long(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteLongIndexedX);
 
-                mmu.store_u16(addr + self.x as u32, self.a);
+                mmu.store_u16(addr, self.a);
             }
 
             Instruction::StoreADirectPageIndexedX => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPageIndexedX);
 
-                mmu.store_u16(
-                    self.direct_page as u32 + addr as u32 + self.x as u32,
-                    self.a,
-                );
+                mmu.store_u16(addr, self.a);
             }
 
             Instruction::StoreXAbsolute => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
 
-                mmu.store_u16(bank_addr(self.data_bank, addr), self.x);
+                mmu.store_u16(addr, self.x);
             }
 
             Instruction::StoreXDirectPage => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
 
-                mmu.store_u16(self.direct_page as u32 + addr as u32, self.x);
+                mmu.store_u16(addr, self.x);
             }
 
             Instruction::StoreYDirectPage => {
                 // TODO: 8 bit mode?
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
 
-                mmu.store_u16(self.direct_page as u32 + addr as u32, self.y);
+                mmu.store_u16(addr, self.y);
             }
 
             Instruction::StoreZeroAbsolute => {
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
 
-                mmu.store_u8(bank_addr(self.data_bank, addr), 0);
+                mmu.store_u8(addr, 0);
             }
 
             Instruction::StoreZeroDirectPage => {
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
 
-                mmu.store_u8(self.direct_page as u32 + addr as u32, 0);
+                mmu.store_u8(addr, 0);
             }
 
             Instruction::StoreZeroAbsoluteIndexedX => {
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteIndexedX);
 
-                mmu.store_u8(bank_addr(self.data_bank, addr) + self.x as u32, 0);
+                mmu.store_u8(addr, 0);
             }
 
             Instruction::StoreZeroDirectPageIndexedX => {
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPageIndexedX);
 
-                mmu.store_u8(self.direct_page as u32 + addr as u32 + self.x as u32, 0);
+                mmu.store_u8(addr, 0);
             }
 
             Instruction::AddWithCarryImmediate => {
@@ -341,48 +364,30 @@ impl Cpu {
             }
 
             Instruction::AddWithCarryAbsolute => {
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
 
                 if self.a_u8_mode() {
-                    adc_u8(
-                        &mut self.a,
-                        &mut self.status,
-                        mmu.read_u8(bank_addr(self.data_bank, addr)),
-                    )
+                    adc_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
                 } else {
-                    adc_u16(
-                        &mut self.a,
-                        &mut self.status,
-                        mmu.read_u16(bank_addr(self.data_bank, addr)),
-                    )
+                    adc_u16(&mut self.a, &mut self.status, mmu.read_u16(addr))
                 }
             }
 
             Instruction::AddWithCarryDirectPage => {
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
 
                 if self.a_u8_mode() {
-                    adc_u8(
-                        &mut self.a,
-                        &mut self.status,
-                        mmu.read_u8(self.direct_page as u32 + addr as u32),
-                    )
+                    adc_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
                 } else {
-                    adc_u16(
-                        &mut self.a,
-                        &mut self.status,
-                        mmu.read_u16(self.direct_page as u32 + addr as u32),
-                    )
+                    adc_u16(&mut self.a, &mut self.status, mmu.read_u16(addr))
                 }
             }
 
             Instruction::IncrementDirectPage => {
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
+                let value = mmu.read_u8(addr).wrapping_add(1);
 
-                let offset_addr = self.direct_page as u32 + addr as u32;
-                let value = mmu.read_u8(offset_addr).wrapping_add(1);
-
-                mmu.store_u8(offset_addr, value);
+                mmu.store_u8(addr, value);
 
                 self.status.set(Flags::NEGATIVE, (value >> 7) & 1 == 1);
                 self.status.set(Flags::ZERO, value == 0);
@@ -504,35 +509,23 @@ impl Cpu {
 
             Instruction::CompareAbsolute => {
                 // TODO: 16 bit mode?
-                let addr = self.fetch_u16(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
 
-                compare_u8(
-                    &mut self.status,
-                    self.a as u8,
-                    mmu.read_u8(bank_addr(self.data_bank, addr)),
-                )
+                compare_u8(&mut self.status, self.a as u8, mmu.read_u8(addr))
             }
 
             Instruction::CompareDirectPage => {
                 // TODO: 16 bit mode?
-                let addr = self.fetch_u8(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
 
-                compare_u8(
-                    &mut self.status,
-                    self.a as u8,
-                    mmu.read_u8(self.direct_page as u32 + addr as u32),
-                )
+                compare_u8(&mut self.status, self.a as u8, mmu.read_u8(addr))
             }
 
             Instruction::CompareAbsoluteLongIndexedX => {
                 // TODO: 16 bit mode?
-                let addr = self.fetch_long(mmu);
+                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteLongIndexedX);
 
-                compare_u8(
-                    &mut self.status,
-                    self.a as u8,
-                    mmu.read_u8(addr + self.x as u32),
-                )
+                compare_u8(&mut self.status, self.a as u8, mmu.read_u8(addr))
             }
 
             Instruction::CompareXImmediate => {
