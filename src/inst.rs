@@ -15,6 +15,7 @@ pub enum Instruction {
     LoadADirectPageIndirectLong(u8),
     LoadAAbsoluteIndexedX(u16),
     LoadAAbsoluteLongIndexedX(u32),
+    LoadAAbsoluteIndexedY(u16),
     LoadXImmediate(Immediate),
     LoadXDirectPage(u8),
     LoadYImmediate(Immediate),
@@ -121,6 +122,7 @@ impl Instruction {
             }
             Instruction::LoadAAbsoluteIndexedX(addr) => absolute_indexed_x("LDA", addr),
             Instruction::LoadAAbsoluteLongIndexedX(addr) => absolute_long_indexed_x("LDA", addr),
+            Instruction::LoadAAbsoluteIndexedY(addr) => absolute_indexed_y("LDA", addr),
             Instruction::LoadXImmediate(imm) => immediate("LDX", imm),
             Instruction::LoadXDirectPage(addr) => direct_page("LDX", addr),
             Instruction::LoadYImmediate(imm) => immediate("LDY", imm),
@@ -235,6 +237,10 @@ fn absolute_indexed_x(opcode: &str, addr: &u16) -> String {
 
 fn absolute_long_indexed_x(opcode: &str, addr: &u32) -> String {
     format!("{} ${:04X},X", opcode, addr)
+}
+
+fn absolute_indexed_y(opcode: &str, addr: &u16) -> String {
+    format!("{} ${:04X},Y", opcode, addr)
 }
 
 fn branch(opcode: &str, offset: &u8) -> String {

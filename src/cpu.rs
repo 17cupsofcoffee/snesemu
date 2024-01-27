@@ -223,6 +223,7 @@ impl Cpu {
             0xAB => Instruction::PullB,
             0xAD => Instruction::LoadAAbsolute(self.fetch_u16(mmu)),
             0xB0 => Instruction::BranchCarrySet(self.fetch_u8(mmu)),
+            0xB9 => Instruction::LoadAAbsoluteIndexedY(self.fetch_u16(mmu)),
             0xBD => Instruction::LoadAAbsoluteIndexedX(self.fetch_u16(mmu)),
             0xBF => Instruction::LoadAAbsoluteLongIndexedX(self.fetch_long(mmu)),
             0xC2 => Instruction::ResetFlags(self.fetch_u8(mmu)),
@@ -316,6 +317,15 @@ impl Cpu {
                     &mut self.a,
                     &mut self.status,
                     mmu.read_u8(addr + self.x as u32),
+                )
+            }
+
+            Instruction::LoadAAbsoluteIndexedY(addr) => {
+                // TODO: 16 bit mode
+                load_u8(
+                    &mut self.a,
+                    &mut self.status,
+                    mmu.read_u8(bank_addr(self.data_bank, addr) + self.y as u32),
                 )
             }
 
