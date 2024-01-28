@@ -305,6 +305,10 @@ impl Cpu {
                 self.store(mmu, Register::A, AddressingMode::AbsoluteLongIndexedX);
             }
 
+            Instruction::StoreAAbsoluteIndexedY => {
+                self.store(mmu, Register::A, AddressingMode::AbsoluteIndexedY);
+            }
+
             Instruction::StoreADirectPageIndexedX => {
                 self.store(mmu, Register::A, AddressingMode::DirectPageIndexedX);
             }
@@ -353,8 +357,16 @@ impl Cpu {
                 self.add_with_carry(mmu, AddressingMode::DirectPage);
             }
 
+            Instruction::AddWithCarryAbsoluteIndexedY => {
+                self.add_with_carry(mmu, AddressingMode::AbsoluteIndexedY);
+            }
+
             Instruction::IncrementDirectPage => {
                 self.inc_dec_memory(mmu, AddressingMode::DirectPage, 1);
+            }
+
+            Instruction::IncrementA => {
+                self.inc_dec_register(Register::A, 1);
             }
 
             Instruction::IncrementX => {
