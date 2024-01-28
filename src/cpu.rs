@@ -418,6 +418,15 @@ impl Cpu {
                 self.status.set(Flags::ZERO, self.sp == 0);
             }
 
+            Instruction::MoveYA => {
+                if self.is_eight_bit_mode(Register::A) || self.is_eight_bit_mode(Register::Y) {
+                    // TODO: This shouldn't wipe out the high byte when A is 8bit.
+                    self.a = self.y & 0x00FF;
+                } else {
+                    self.a = self.y;
+                }
+            }
+
             Instruction::ExchangeBA => {
                 self.a = (self.a << 8) | (self.a >> 8);
 

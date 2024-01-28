@@ -47,6 +47,7 @@ pub enum Instruction {
     MoveAY,
     MoveDA,
     MoveXSP,
+    MoveYA,
     ExchangeBA,
 
     // Block moves
@@ -140,6 +141,7 @@ impl Instruction {
             0x8E => Instruction::StoreXAbsolute,
             0x90 => Instruction::BranchCarryClear,
             0x95 => Instruction::StoreADirectPageIndexedX,
+            0x98 => Instruction::MoveYA,
             0x9A => Instruction::MoveXSP,
             0x9C => Instruction::StoreZeroAbsolute,
             0x9D => Instruction::StoreAAbsoluteIndexedX,
