@@ -1,10 +1,7 @@
-mod ops;
-
 use std::fmt::Write;
 
 use bitflags::bitflags;
 
-use self::ops::*;
 use crate::inst::Instruction;
 use crate::mmu::Mmu;
 
@@ -12,7 +9,18 @@ fn bank_addr(bank: u8, addr: u16) -> u32 {
     (bank as u32) << 16 | (addr as u32)
 }
 
-enum AddressingMode {
+#[derive(Clone, Copy)]
+pub enum Register {
+    A,
+    D,
+    X,
+    Y,
+}
+
+#[derive(Clone, Copy)]
+pub enum AddressingMode {
+    Immediate8,
+    Immediate16,
     Absolute,
     DirectPage,
     DirectPageIndirectLong,
@@ -85,10 +93,6 @@ impl Cpu {
         self.pc = (addr & 0x0000FFFF) as u16;
     }
 
-    pub fn a_u8_mode(&self) -> bool {
-        self.emulation || self.status.contains(Flags::MEMORY_SELECT)
-    }
-
     pub fn xy_u8_mode(&self) -> bool {
         self.emulation || self.status.contains(Flags::INDEX_REGISTER)
     }
@@ -116,6 +120,20 @@ impl Cpu {
 
     fn fetch_addr(&mut self, mmu: &Mmu, addr_mode: AddressingMode) -> u32 {
         match addr_mode {
+            AddressingMode::Immediate8 => {
+                let addr = self.current_addr();
+                self.pc += 1;
+
+                addr
+            }
+
+            AddressingMode::Immediate16 => {
+                let addr = self.current_addr();
+                self.pc += 2;
+
+                addr
+            }
+
             AddressingMode::Absolute => {
                 let addr = self.fetch_u16(mmu);
 
@@ -180,6 +198,34 @@ impl Cpu {
         mmu.read_u16(self.sp as u32 - 1)
     }
 
+    pub fn get_register(&self, register: Register) -> u16 {
+        match register {
+            Register::A => self.a,
+            Register::D => self.direct_page,
+            Register::X => self.x,
+            Register::Y => self.y,
+        }
+    }
+
+    pub fn set_register(&mut self, register: Register, value: u16) {
+        match register {
+            Register::A => self.a = value,
+            Register::D => self.direct_page = value,
+            Register::X => self.x = value,
+            Register::Y => self.y = value,
+        }
+    }
+
+    pub fn is_eight_bit_mode(&self, register: Register) -> bool {
+        match register {
+            Register::A => self.emulation || self.status.contains(Flags::MEMORY_SELECT),
+            Register::D => false,
+            Register::X | Register::Y => {
+                self.emulation || self.status.contains(Flags::INDEX_REGISTER)
+            }
+        }
+    }
+
     pub fn tick(&mut self, mmu: &mut Mmu) {
         let opcode = self.fetch_u8(mmu);
         let inst = Instruction::from_opcode(opcode);
@@ -188,241 +234,143 @@ impl Cpu {
             Instruction::Unknown { .. } => {}
 
             Instruction::LoadAImmediate => {
-                if self.a_u8_mode() {
-                    let value = self.fetch_u8(mmu);
-                    load_u8(&mut self.a, &mut self.status, value);
+                if self.is_eight_bit_mode(Register::A) {
+                    self.load(mmu, Register::A, AddressingMode::Immediate8);
                 } else {
-                    let value = self.fetch_u16(mmu);
-                    load_u16(&mut self.a, &mut self.status, value);
+                    self.load(mmu, Register::A, AddressingMode::Immediate16);
                 }
             }
 
             Instruction::LoadAAbsolute => {
-                // TODO: 16 bit mode
-                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
-
-                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
+                self.load(mmu, Register::A, AddressingMode::Absolute);
             }
 
             Instruction::LoadADirectPage => {
-                // TODO: 16 bit mode
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-
-                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
+                self.load(mmu, Register::A, AddressingMode::DirectPage);
             }
 
             Instruction::LoadADirectPageIndirectLong => {
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPageIndirectLong);
-
-                // TODO: 16 bit mode
-                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
+                self.load(mmu, Register::A, AddressingMode::DirectPageIndirectLong);
             }
 
             Instruction::LoadAAbsoluteIndexedX => {
-                // TODO: 16 bit mode
-                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteIndexedX);
-
-                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
+                self.load(mmu, Register::A, AddressingMode::AbsoluteIndexedX);
             }
 
             Instruction::LoadAAbsoluteLongIndexedX => {
-                // TODO: 16 bit mode
-                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteLongIndexedX);
-
-                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
+                self.load(mmu, Register::A, AddressingMode::AbsoluteLongIndexedX);
             }
 
             Instruction::LoadAAbsoluteIndexedY => {
-                // TODO: 16 bit mode
-                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteIndexedY);
-
-                load_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
+                self.load(mmu, Register::A, AddressingMode::AbsoluteIndexedY);
             }
 
             Instruction::LoadXImmediate => {
                 if self.xy_u8_mode() {
-                    let value = self.fetch_u8(mmu);
-                    load_u8(&mut self.x, &mut self.status, value);
+                    self.load(mmu, Register::X, AddressingMode::Immediate8);
                 } else {
-                    let value = self.fetch_u16(mmu);
-                    load_u16(&mut self.x, &mut self.status, value)
+                    self.load(mmu, Register::X, AddressingMode::Immediate16);
                 }
             }
 
             Instruction::LoadXDirectPage => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-
-                load_u16(&mut self.x, &mut self.status, mmu.read_u16(addr))
+                self.load(mmu, Register::X, AddressingMode::DirectPage);
             }
 
             Instruction::LoadYImmediate => {
                 if self.xy_u8_mode() {
-                    let value = self.fetch_u8(mmu);
-                    load_u8(&mut self.y, &mut self.status, value);
+                    self.load(mmu, Register::Y, AddressingMode::Immediate8);
                 } else {
-                    let value = self.fetch_u16(mmu);
-                    load_u16(&mut self.y, &mut self.status, value)
+                    self.load(mmu, Register::Y, AddressingMode::Immediate16);
                 }
             }
 
             Instruction::LoadYDirectPage => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-
-                load_u16(&mut self.y, &mut self.status, mmu.read_u16(addr))
+                self.load(mmu, Register::Y, AddressingMode::DirectPage);
             }
 
             Instruction::StoreAAbsolute => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
-
-                mmu.store_u16(addr, self.a);
+                self.store(mmu, Register::A, AddressingMode::Absolute);
             }
 
             Instruction::StoreADirectPage => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-
-                mmu.store_u16(addr, self.a);
+                self.store(mmu, Register::A, AddressingMode::DirectPage);
             }
 
             Instruction::StoreAAbsoluteIndexedX => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteIndexedX);
-
-                mmu.store_u16(addr, self.a);
+                self.store(mmu, Register::A, AddressingMode::AbsoluteIndexedX);
             }
 
             Instruction::StoreAAbsoluteLongIndexedX => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteLongIndexedX);
-
-                mmu.store_u16(addr, self.a);
+                self.store(mmu, Register::A, AddressingMode::AbsoluteLongIndexedX);
             }
 
             Instruction::StoreADirectPageIndexedX => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPageIndexedX);
-
-                mmu.store_u16(addr, self.a);
+                self.store(mmu, Register::A, AddressingMode::DirectPageIndexedX);
             }
 
             Instruction::StoreXAbsolute => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
-
-                mmu.store_u16(addr, self.x);
+                self.store(mmu, Register::X, AddressingMode::Absolute);
             }
 
             Instruction::StoreXDirectPage => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-
-                mmu.store_u16(addr, self.x);
+                self.store(mmu, Register::X, AddressingMode::DirectPage);
             }
 
             Instruction::StoreYDirectPage => {
-                // TODO: 8 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-
-                mmu.store_u16(addr, self.y);
+                self.store(mmu, Register::Y, AddressingMode::DirectPage);
             }
 
             Instruction::StoreZeroAbsolute => {
-                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
-
-                mmu.store_u8(addr, 0);
+                self.store_zero(mmu, AddressingMode::Absolute);
             }
 
             Instruction::StoreZeroDirectPage => {
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-
-                mmu.store_u8(addr, 0);
+                self.store_zero(mmu, AddressingMode::DirectPage);
             }
 
             Instruction::StoreZeroAbsoluteIndexedX => {
-                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteIndexedX);
-
-                mmu.store_u8(addr, 0);
+                self.store_zero(mmu, AddressingMode::AbsoluteIndexedX);
             }
 
             Instruction::StoreZeroDirectPageIndexedX => {
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPageIndexedX);
-
-                mmu.store_u8(addr, 0);
+                self.store_zero(mmu, AddressingMode::DirectPageIndexedX);
             }
 
             Instruction::AddWithCarryImmediate => {
-                if self.a_u8_mode() {
-                    let value = self.fetch_u8(mmu);
-                    adc_u8(&mut self.a, &mut self.status, value)
+                if self.is_eight_bit_mode(Register::A) {
+                    self.add_with_carry(mmu, AddressingMode::Immediate8);
                 } else {
-                    let value = self.fetch_u16(mmu);
-                    adc_u16(&mut self.a, &mut self.status, value)
+                    self.add_with_carry(mmu, AddressingMode::Immediate16);
                 }
             }
 
             Instruction::AddWithCarryAbsolute => {
-                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
-
-                if self.a_u8_mode() {
-                    adc_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
-                } else {
-                    adc_u16(&mut self.a, &mut self.status, mmu.read_u16(addr))
-                }
+                self.add_with_carry(mmu, AddressingMode::Absolute);
             }
 
             Instruction::AddWithCarryDirectPage => {
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-
-                if self.a_u8_mode() {
-                    adc_u8(&mut self.a, &mut self.status, mmu.read_u8(addr))
-                } else {
-                    adc_u16(&mut self.a, &mut self.status, mmu.read_u16(addr))
-                }
+                self.add_with_carry(mmu, AddressingMode::DirectPage);
             }
 
             Instruction::IncrementDirectPage => {
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-                let value = mmu.read_u8(addr).wrapping_add(1);
-
-                mmu.store_u8(addr, value);
-
-                self.status.set(Flags::NEGATIVE, (value >> 7) & 1 == 1);
-                self.status.set(Flags::ZERO, value == 0);
+                self.inc_dec_memory(mmu, AddressingMode::DirectPage, 1);
             }
 
             Instruction::IncrementX => {
-                self.x = self.x.wrapping_add(1);
-
-                // TODO: 8 bit mode
-                self.status.set(Flags::NEGATIVE, (self.x >> 15) & 1 == 1);
-                self.status.set(Flags::ZERO, self.x == 0);
+                self.inc_dec_register(Register::X, 1);
             }
 
             Instruction::IncrementY => {
-                self.y = self.y.wrapping_add(1);
-
-                // TODO: 8 bit mode
-                self.status.set(Flags::NEGATIVE, (self.y >> 15) & 1 == 1);
-                self.status.set(Flags::ZERO, self.y == 0);
+                self.inc_dec_register(Register::Y, 1);
             }
 
             Instruction::DecrementX => {
-                self.x = self.x.wrapping_sub(1);
-
-                // TODO: 8 bit mode
-                self.status.set(Flags::NEGATIVE, (self.x >> 15) & 1 == 1);
-                self.status.set(Flags::ZERO, self.x == 0);
+                self.inc_dec_register(Register::X, -1);
             }
 
             Instruction::DecrementY => {
-                self.y = self.y.wrapping_sub(1);
-
-                // TODO: 8 bit mode
-                self.status.set(Flags::NEGATIVE, (self.y >> 15) & 1 == 1);
-                self.status.set(Flags::ZERO, self.y == 0);
+                self.inc_dec_register(Register::Y, -1);
             }
 
             Instruction::ShiftLeft => {
@@ -498,77 +446,55 @@ impl Cpu {
             }
 
             Instruction::CompareImmediate => {
-                if self.a_u8_mode() {
-                    let value = self.fetch_u8(mmu);
-                    compare_u8(&mut self.status, self.a as u8, value)
+                if self.is_eight_bit_mode(Register::A) {
+                    self.compare(mmu, Register::A, AddressingMode::Immediate8);
                 } else {
-                    let value = self.fetch_u16(mmu);
-                    compare_u16(&mut self.status, self.a, value)
+                    self.compare(mmu, Register::A, AddressingMode::Immediate16);
                 }
             }
 
             Instruction::CompareAbsolute => {
-                // TODO: 16 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::Absolute);
-
-                compare_u8(&mut self.status, self.a as u8, mmu.read_u8(addr))
+                self.compare(mmu, Register::A, AddressingMode::Absolute);
             }
 
             Instruction::CompareDirectPage => {
-                // TODO: 16 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::DirectPage);
-
-                compare_u8(&mut self.status, self.a as u8, mmu.read_u8(addr))
+                self.compare(mmu, Register::A, AddressingMode::DirectPage);
             }
 
             Instruction::CompareAbsoluteLongIndexedX => {
-                // TODO: 16 bit mode?
-                let addr = self.fetch_addr(mmu, AddressingMode::AbsoluteLongIndexedX);
-
-                compare_u8(&mut self.status, self.a as u8, mmu.read_u8(addr))
+                self.compare(mmu, Register::A, AddressingMode::AbsoluteLongIndexedX);
             }
 
             Instruction::CompareXImmediate => {
                 if self.xy_u8_mode() {
-                    let value = self.fetch_u8(mmu);
-                    compare_u8(&mut self.status, self.x as u8, value)
+                    self.compare(mmu, Register::X, AddressingMode::Immediate8);
                 } else {
-                    let value = self.fetch_u16(mmu);
-                    compare_u16(&mut self.status, self.x, value)
+                    self.compare(mmu, Register::X, AddressingMode::Immediate16);
                 }
             }
 
             Instruction::BranchCarryClear => {
-                let offset = self.fetch_u8(mmu);
-
-                branch(&mut self.pc, offset, !self.status.contains(Flags::CARRY))
+                self.branch(mmu, !self.status.contains(Flags::CARRY));
             }
 
             Instruction::BranchCarrySet => {
-                let offset = self.fetch_u8(mmu);
-
-                branch(&mut self.pc, offset, self.status.contains(Flags::CARRY))
+                self.branch(mmu, self.status.contains(Flags::CARRY));
             }
 
             Instruction::BranchNotEqual => {
-                let offset = self.fetch_u8(mmu);
-
-                branch(&mut self.pc, offset, !self.status.contains(Flags::ZERO))
+                self.branch(mmu, !self.status.contains(Flags::ZERO));
             }
 
             Instruction::BranchEqual => {
-                let offset = self.fetch_u8(mmu);
-
-                branch(&mut self.pc, offset, self.status.contains(Flags::ZERO))
+                self.branch(mmu, self.status.contains(Flags::ZERO));
             }
 
             Instruction::BranchAlways => {
-                let offset = self.fetch_u8(mmu);
-                branch(&mut self.pc, offset, true)
+                self.branch(mmu, true);
             }
 
             Instruction::PushA => {
-                if self.a_u8_mode() {
+                if self.is_eight_bit_mode(Register::A) {
                     self.push_u8(mmu, self.a as u8);
                 } else {
                     self.push_u16(mmu, self.a);
@@ -610,13 +536,7 @@ impl Cpu {
             }
 
             Instruction::PullA => {
-                if self.a_u8_mode() {
-                    let value = self.pull_u8(mmu);
-                    load_u8(&mut self.a, &mut self.status, value);
-                } else {
-                    let value = self.pull_u16(mmu);
-                    load_u16(&mut self.a, &mut self.status, value);
-                }
+                self.pull(mmu, Register::A);
             }
 
             Instruction::PullB => {
@@ -630,28 +550,15 @@ impl Cpu {
             }
 
             Instruction::PullD => {
-                let value = self.pull_u16(mmu);
-                load_u16(&mut self.direct_page, &mut self.status, value);
+                self.pull(mmu, Register::D);
             }
 
             Instruction::PullX => {
-                if self.xy_u8_mode() {
-                    let value = self.pull_u8(mmu);
-                    load_u8(&mut self.x, &mut self.status, value);
-                } else {
-                    let value = self.pull_u16(mmu);
-                    load_u16(&mut self.x, &mut self.status, value);
-                }
+                self.pull(mmu, Register::X);
             }
 
             Instruction::PullY => {
-                if self.xy_u8_mode() {
-                    let value = self.pull_u8(mmu);
-                    load_u8(&mut self.y, &mut self.status, value);
-                } else {
-                    let value = self.pull_u16(mmu);
-                    load_u16(&mut self.y, &mut self.status, value);
-                }
+                self.pull(mmu, Register::Y);
             }
 
             Instruction::PullStatus => {
@@ -731,6 +638,171 @@ impl Cpu {
 
             Instruction::Break => {
                 // TODO: Probably not right but let's see if it works
+            }
+        }
+    }
+
+    pub fn load(&mut self, mmu: &Mmu, register: Register, addr_mode: AddressingMode) {
+        let addr = self.fetch_addr(mmu, addr_mode);
+
+        if self.is_eight_bit_mode(register) {
+            let value = mmu.read_u8(addr);
+
+            self.set_register(register, value as u16);
+
+            self.status.set(Flags::NEGATIVE, (value >> 7) & 1 == 1);
+            self.status.set(Flags::ZERO, value == 0);
+        } else {
+            let value = mmu.read_u16(addr);
+
+            self.set_register(register, value);
+
+            self.status.set(Flags::NEGATIVE, (value >> 15) & 1 == 1);
+            self.status.set(Flags::ZERO, value == 0);
+        }
+    }
+
+    pub fn pull(&mut self, mmu: &mut Mmu, register: Register) {
+        if self.is_eight_bit_mode(register) {
+            let value = self.pull_u8(mmu);
+
+            self.set_register(register, value as u16);
+
+            self.status.set(Flags::NEGATIVE, (value >> 7) & 1 == 1);
+            self.status.set(Flags::ZERO, value == 0);
+        } else {
+            let value = self.pull_u16(mmu);
+
+            self.set_register(register, value);
+
+            self.status.set(Flags::NEGATIVE, (value >> 15) & 1 == 1);
+            self.status.set(Flags::ZERO, value == 0);
+        }
+    }
+
+    pub fn store(&mut self, mmu: &mut Mmu, register: Register, addr_mode: AddressingMode) {
+        let addr = self.fetch_addr(mmu, addr_mode);
+
+        if self.is_eight_bit_mode(register) {
+            mmu.store_u8(addr, self.get_register(register) as u8);
+        } else {
+            mmu.store_u16(addr, self.get_register(register));
+        }
+    }
+
+    pub fn store_zero(&mut self, mmu: &mut Mmu, addr_mode: AddressingMode) {
+        let addr = self.fetch_addr(mmu, addr_mode);
+
+        if self.is_eight_bit_mode(Register::A) {
+            mmu.store_u8(addr, 0);
+        } else {
+            mmu.store_u16(addr, 0);
+        }
+    }
+
+    pub fn add_with_carry(&mut self, mmu: &Mmu, addr_mode: AddressingMode) {
+        let addr = self.fetch_addr(mmu, addr_mode);
+
+        if self.is_eight_bit_mode(Register::A) {
+            let value = mmu.read_u8(addr);
+
+            let result = (self.a as u8)
+                .wrapping_add(value)
+                .wrapping_add(self.status.contains(Flags::CARRY) as u8);
+
+            self.status.set(Flags::NEGATIVE, (result >> 7) & 1 == 1);
+            self.status.set(Flags::ZERO, result == 0);
+            self.status.set(Flags::CARRY, result < self.a as u8);
+
+            // TODO: Overflow flag
+
+            self.a = result as u16;
+        } else {
+            let value = mmu.read_u16(addr);
+
+            let result = self
+                .a
+                .wrapping_add(value)
+                .wrapping_add(self.status.contains(Flags::CARRY) as u16);
+
+            self.status.set(Flags::NEGATIVE, (result >> 15) & 1 == 1);
+            self.status.set(Flags::ZERO, result == 0);
+            self.status.set(Flags::CARRY, result < self.a);
+
+            // TODO: Overflow flag
+
+            self.a = result;
+        }
+    }
+
+    pub fn inc_dec_register(&mut self, register: Register, amount: i8) {
+        if self.is_eight_bit_mode(register) {
+            let value = (self.get_register(register) as u8).wrapping_add_signed(amount);
+
+            // TODO: This shouldn't wipe out upper byte
+            self.set_register(register, value as u16);
+
+            self.status.set(Flags::NEGATIVE, (value >> 7) & 1 == 1);
+            self.status.set(Flags::ZERO, value == 0);
+        } else {
+            let value = self
+                .get_register(register)
+                .wrapping_add_signed(amount.into());
+
+            self.set_register(register, value);
+
+            self.status.set(Flags::NEGATIVE, (value >> 15) & 1 == 1);
+            self.status.set(Flags::ZERO, value == 0);
+        }
+    }
+
+    pub fn inc_dec_memory(&mut self, mmu: &mut Mmu, addr_mode: AddressingMode, amount: i8) {
+        // TODO: Can this be 16-bit?
+
+        let addr = self.fetch_addr(mmu, addr_mode);
+        let value = mmu.read_u8(addr).wrapping_add_signed(amount);
+
+        mmu.store_u8(addr, value);
+
+        self.status.set(Flags::NEGATIVE, (value >> 7) & 1 == 1);
+        self.status.set(Flags::ZERO, value == 0);
+    }
+
+    pub fn compare(&mut self, mmu: &Mmu, register: Register, addr_mode: AddressingMode) {
+        let addr = self.fetch_addr(mmu, addr_mode);
+
+        if self.is_eight_bit_mode(register) {
+            let lhs = self.get_register(register) as u8;
+            let rhs = mmu.read_u8(addr);
+
+            let result = lhs.wrapping_sub(rhs);
+
+            self.status.set(Flags::NEGATIVE, (result >> 7) & 1 == 1);
+            self.status.set(Flags::ZERO, result == 0);
+            self.status.set(Flags::CARRY, lhs >= rhs);
+        } else {
+            let lhs = self.get_register(register);
+            let rhs = mmu.read_u16(addr);
+
+            let result = lhs.wrapping_sub(rhs);
+
+            self.status.set(Flags::NEGATIVE, (result >> 15) & 1 == 1);
+            self.status.set(Flags::ZERO, result == 0);
+            self.status.set(Flags::CARRY, lhs >= rhs);
+        }
+    }
+
+    pub fn branch(&mut self, mmu: &Mmu, should_branch: bool) {
+        let offset = self.fetch_u8(mmu);
+
+        if should_branch {
+            let sign_bit = offset >> 7;
+
+            // TODO: Is this overflow behaviour right, or should it increment the bank?
+            if sign_bit == 1 {
+                self.pc = self.pc.wrapping_sub((!offset + 1) as u16);
+            } else {
+                self.pc = self.pc.wrapping_add(offset as u16);
             }
         }
     }

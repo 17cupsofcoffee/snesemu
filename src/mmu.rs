@@ -2,7 +2,7 @@ pub struct Mmu {
     cartridge: Vec<u8>,
     ram: Vec<u8>,
 
-    spc: u8,
+    spc: [u8; 4],
 }
 
 impl Mmu {
@@ -11,7 +11,7 @@ impl Mmu {
             cartridge,
             ram: vec![0; 128000],
 
-            spc: 0xAA,
+            spc: [0xAA, 0xBB, 0x00, 0x00],
         }
     }
 
@@ -33,11 +33,11 @@ impl Mmu {
                     // PPU, APU, Hardware
                     0x2100..=0x213F => 0,
 
-                    // APUIO0
-                    0x2140 => self.spc,
+                    // APUIO
+                    0x2140..=0x2143 => self.spc[offset as usize - 0x2140],
 
                     // PPU, APU, Hardware
-                    0x2141..=0x21FF => 0,
+                    0x2144..=0x21FF => 0,
 
                     // Unused
                     0x2200..=0x2FFF => 0,
@@ -91,11 +91,11 @@ impl Mmu {
                     // PPU, APU, Hardware
                     0x2100..=0x213F => {}
 
-                    // APUIO0
-                    0x2140 => self.spc = value,
+                    // APUIO
+                    0x2140..=0x2143 => self.spc[offset as usize - 0x2140] = value,
 
                     // PPU, APU, Hardware
-                    0x2141..=0x21FF => {}
+                    0x2144..=0x21FF => {}
 
                     // Unused
                     0x2200..=0x2FFF => {}
