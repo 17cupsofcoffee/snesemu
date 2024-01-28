@@ -95,10 +95,6 @@ impl Cpu {
         self.pc = (addr & 0x0000FFFF) as u16;
     }
 
-    pub fn xy_u8_mode(&self) -> bool {
-        self.emulation || self.status.contains(Flags::INDEX_REGISTER)
-    }
-
     fn fetch_u8(&mut self, mmu: &Mmu) -> u8 {
         let value = mmu.read_u8(self.current_addr());
         self.pc += 1;
@@ -268,7 +264,7 @@ impl Cpu {
             }
 
             Instruction::LoadXImmediate => {
-                if self.xy_u8_mode() {
+                if self.is_eight_bit_mode(Register::X) {
                     self.load(mmu, Register::X, AddressingMode::Immediate8);
                 } else {
                     self.load(mmu, Register::X, AddressingMode::Immediate16);
@@ -280,7 +276,7 @@ impl Cpu {
             }
 
             Instruction::LoadYImmediate => {
-                if self.xy_u8_mode() {
+                if self.is_eight_bit_mode(Register::Y) {
                     self.load(mmu, Register::Y, AddressingMode::Immediate8);
                 } else {
                     self.load(mmu, Register::Y, AddressingMode::Immediate16);
@@ -361,6 +357,10 @@ impl Cpu {
 
             Instruction::AddWithCarryAbsoluteIndexedY => {
                 self.add_with_carry(mmu, AddressingMode::AbsoluteIndexedY);
+            }
+
+            Instruction::AddWithCarryDirectPageIndexedX => {
+                self.add_with_carry(mmu, AddressingMode::DirectPageIndexedX);
             }
 
             Instruction::IncrementDirectPage => {
@@ -488,11 +488,23 @@ impl Cpu {
                 self.compare(mmu, Register::A, AddressingMode::AbsoluteLongIndexedX);
             }
 
+            Instruction::CompareDirectPageIndexedX => {
+                self.compare(mmu, Register::A, AddressingMode::DirectPageIndexedX);
+            }
+
             Instruction::CompareXImmediate => {
-                if self.xy_u8_mode() {
+                if self.is_eight_bit_mode(Register::X) {
                     self.compare(mmu, Register::X, AddressingMode::Immediate8);
                 } else {
                     self.compare(mmu, Register::X, AddressingMode::Immediate16);
+                }
+            }
+
+            Instruction::CompareYImmediate => {
+                if self.is_eight_bit_mode(Register::Y) {
+                    self.compare(mmu, Register::Y, AddressingMode::Immediate8);
+                } else {
+                    self.compare(mmu, Register::Y, AddressingMode::Immediate16);
                 }
             }
 
@@ -533,7 +545,7 @@ impl Cpu {
             }
 
             Instruction::PushX => {
-                if self.xy_u8_mode() {
+                if self.is_eight_bit_mode(Register::X) {
                     self.push_u8(mmu, self.x as u8);
                 } else {
                     self.push_u16(mmu, self.x);
@@ -541,7 +553,7 @@ impl Cpu {
             }
 
             Instruction::PushY => {
-                if self.xy_u8_mode() {
+                if self.is_eight_bit_mode(Register::Y) {
                     self.push_u8(mmu, self.y as u8);
                 } else {
                     self.push_u16(mmu, self.y);
