@@ -31,6 +31,7 @@ pub enum AddressingMode {
 }
 
 bitflags! {
+    #[derive(Clone)]
     pub struct Flags: u8 {
         const CARRY          = 0b00000001;
         const ZERO           = 0b00000010;
@@ -45,6 +46,7 @@ bitflags! {
     }
 }
 
+#[derive(Clone)]
 pub struct Cpu {
     // Registers
     a: u16,

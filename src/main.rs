@@ -2,6 +2,7 @@ mod cpu;
 mod inst;
 mod mmu;
 
+use std::collections::VecDeque;
 use std::fmt::Write;
 
 use self::cpu::Cpu;
@@ -15,14 +16,31 @@ fn main() {
     let mut cpu = Cpu::new();
     cpu.set_current_addr(mmu.reset_vector() as u32);
 
-    let mut output = String::new();
+    let mut snapshots = VecDeque::new();
 
     loop {
-        let current_addr = cpu.current_addr();
+        if snapshots.len() >= 200 {
+            snapshots.pop_front();
+        }
+
+        snapshots.push_back(cpu.clone());
+
         let opcode = mmu.read_u8(cpu.current_addr());
         let inst = Instruction::from_opcode(opcode);
 
         cpu.tick(&mut mmu);
+
+        if let Instruction::Unknown = inst {
+            break;
+        }
+    }
+
+    let mut output = String::new();
+
+    for snapshot in snapshots {
+        let current_addr = snapshot.current_addr();
+        let opcode = mmu.read_u8(current_addr);
+        let inst = Instruction::from_opcode(opcode);
 
         let _ = writeln!(
             output,
@@ -30,13 +48,9 @@ fn main() {
             current_addr,
             opcode,
             inst,
-            cpu.register_debug(),
-            cpu.stack_debug(&mmu)
+            snapshot.register_debug(),
+            snapshot.stack_debug(&mmu) // TODO: This isn't accurate for snapshots
         );
-
-        if let Instruction::Unknown = inst {
-            break;
-        }
     }
 
     let _ = std::fs::write("output.log", &output);
